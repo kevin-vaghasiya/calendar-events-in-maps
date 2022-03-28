@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Calendar To Maps</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css"
+    />
+    <style>
+      #map {
+        height: 100%;
+      }
+
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+      .date-container {
+        position: fixed;
+        right: 3em;
+        top: 3.5em;
+        box-shadow: rgba(149, 157, 165, 0.2) 0px 8px 24px;
+      }
+      .date-input {
+        width: 300px;
+        padding: 12px 20px;
+        display: inline-block;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        box-sizing: border-box;
+        background-color: #fafafa;
+        font-size: large;
+      }
+      .loader {
+        border: 16px solid #f3f3f3;
+        border-radius: 50%;
+        border-top: 16px solid #3498db;
+        width: 120px;
+        height: 120px;
+        -webkit-animation: spin 2s linear infinite; /* Safari */
+        animation: spin 2s linear infinite;
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        margin-top: -60px;
+        margin-left: -60px;
+      }
+
+      /* Safari */
+      @-webkit-keyframes spin {
+        0% {
+          -webkit-transform: rotate(0deg);
+        }
+        100% {
+          -webkit-transform: rotate(360deg);
+        }
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+    <script
+      src="https://code.jquery.com/jquery-3.6.0.min.js"
+      integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4="
+      crossorigin="anonymous"
+    ></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script
+      async
+      src="https://maps.googleapis.com/maps/api/js?key=<?= maps_api_key ?>&callback=initMap"
+    ></script>
+  </head>
+  <body>
+    <div id="map"></div>
+    <div class="date-container">
+      <input
+        type="text"
+        id="date"
+        placeholder="Select Date Range"
+        class="date-input"
+      />
+    </div>
+    <div id="loader" class="loader"></div>
+    <script>
+      let map = null;
+      let infoWindow = null;
+      let markers = [];
+      function initMap() {
+        map = new google.maps.Map(document.getElementById('map'), {
+          center: { lat: 21.1892303, lng: 72.78999809999999 },
+          zoom: 12,
+          styles: [
+            {
+              featureType: 'poi',
+              elementType: 'labels',
+              stylers: [{ visibility: 'off' }],
+            },
+          ],
+        });
+        infoWindow = new google.maps.InfoWindow();
+      }
+
+      $('#date').flatpickr({
+        dateFormat: 'm/d/Y',
+        mode: 'range',
+        defaultDate: new Date(),
+        onChange: () => getLocations(),
+      });
+
+      function getLocations() {
+        const dt = $('#date').val();
+        if (!dt) return alert('choose a date.');
+        $('#loader').show();
+        const [start, end] = dt.split('to');
+        const start_date = new Date(start);
+        let end_date = null;
+        if (!end) {
+          end_date = new Date(start_date);
+        } else end_date = new Date(end);
+        end_date.setDate(end_date.getDate() + 1);
+
+        google.script.run.withSuccessHandler(setMap).getEvents({
+          start_date: start_date.toISOString(),
+          end_date: end_date.toISOString(),
+        });
+        clearMarkers();
+      }
+      getLocations();
+
+      function setMap(data) {
+        const events = JSON.parse(data);
+        $('#loader').hide();
+        if (events.error) return alert(events.message);
+
+        for (let i = 0; i < events.length; i++) {
+          const { geo, title, start_time, end_time, description, location } =
+            events[i];
+          const marker = new google.maps.Marker({
+            position: geo,
+            map,
+            title,
+            label: {
+              fontWeight: 'bold',
+              fontSize: '16px',
+              text: title,
+              color: '#464646',
+            },
+          });
+          const info = `${title}\n\n\n${description}`;
+          google.maps.event.addListener(
+            marker,
+            'click',
+            ((marker, i) => () => {
+              infoWindow.setContent(getInfoWindowContent(events[i]));
+              infoWindow.open(map, marker);
+            })(marker, i)
+          );
+          markers.push(marker);
+        }
+      }
+
+      function getInfoWindowContent({
+        title,
+        start_time,
+        end_time,
+        description,
+        location,
+      }) {
+        return `<h2>${title}</h2>
+        <h5>${location}</h5>
+        <p>${new Date(start_time)
+          .toLocaleString()
+          .replace(',', '')} - ${new Date(end_time)
+          .toLocaleString()
+          .replace(',', '')}</p>
+        <p>${description}</p>`;
+      }
+
+      function clearMarkers() {
+        for (let i = 0; i < markers.length; i++) {
+          const marker = markers[i];
+          marker.setMap(null);
+        }
+      }
+    </script>
+  </body>
+</html>
