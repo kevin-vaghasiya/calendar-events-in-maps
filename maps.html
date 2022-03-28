@@ -146,6 +146,8 @@
         for (let i = 0; i < events.length; i++) {
           const { geo, title, start_time, end_time, description, location } =
             events[i];
+          if (i == 0) map.setCenter(geo);
+
           const marker = new google.maps.Marker({
             position: geo,
             map,
